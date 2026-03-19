@@ -193,3 +193,7 @@ export type { TriggeredHintOverlayProps } from "./visual/TriggeredHintOverlay";
 // Inline Interaction Hint (tooltip-style hints for inline components)
 export { InlineInteractionHint, useComponentHint, HintIcon } from "./text/InlineInteractionHint";
 export type { InlineInteractionHintProps, UseComponentHintOptions } from "./text/InlineInteractionHint";
+
+// Visual — Icosahedra Explorer (2D drawing + 3D icosahedron)
+export { IcosahedraExplorer } from "./visual/IcosahedraExplorer";
+export type { IcosahedraExplorerProps } from "./visual/IcosahedraExplorer";
