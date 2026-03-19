@@ -33,126 +33,152 @@ interface Point {
 }
 
 // Generate the stellation diagram matching the classic icosahedral pattern
-// The diagram has a central triangle with regions numbered 0-13 extending outward
+// The stellation diagram is created by the 18 lines where other icosahedron face planes
+// intersect with one triangular face plane. This creates a specific pattern of cells.
+// Reference: "The Fifty-Nine Icosahedra" by Coxeter, Du Val, Flather, and Petrie
 function generateStellationGeometry(size: number, cx: number, cy: number) {
     const h = size * Math.sqrt(3) / 2;
+    const phi = (1 + Math.sqrt(5)) / 2; // Golden ratio ≈ 1.618
 
     // Main triangle vertices - pointing DOWN (flat edge at top)
-    // This matches the reference image orientation
-    const T: Point = { x: cx - size / 2, y: cy - h / 3 };  // Top-left
-    const U: Point = { x: cx + size / 2, y: cy - h / 3 };  // Top-right
-    const V: Point = { x: cx, y: cy + 2 * h / 3 };         // Bottom center
+    // A = top-left, B = top-right, C = bottom center
+    const A: Point = { x: cx - size / 2, y: cy - h / 3 };
+    const B: Point = { x: cx + size / 2, y: cy - h / 3 };
+    const C: Point = { x: cx, y: cy + 2 * h / 3 };
 
-    // The stellation pattern is created by extending lines through each vertex
-    // parallel to the opposite edge, creating a grid of cells.
-    // For icosahedron stellation, the key ratios are based on the golden ratio φ.
-    const phi = (1 + Math.sqrt(5)) / 2;
+    // The stellation diagram is formed by extending lines through each edge
+    // The key distances are based on the golden ratio
+    // The icosahedron's face planes intersect at specific angles creating
+    // a pattern with distances proportional to 1, φ, φ², φ³
 
-    // Midpoints of original edges
-    const mTU: Point = { x: (T.x + U.x) / 2, y: (T.y + U.y) / 2 };
-    const mUV: Point = { x: (U.x + V.x) / 2, y: (U.y + V.y) / 2 };
-    const mVT: Point = { x: (V.x + T.x) / 2, y: (V.y + T.y) / 2 };
+    // Helper: Linear interpolation between two points
+    const lerp = (p1: Point, p2: Point, t: number): Point => ({
+        x: p1.x + (p2.x - p1.x) * t,
+        y: p1.y + (p2.y - p1.y) * t
+    });
 
     // Center of triangle
-    const center: Point = { x: (T.x + U.x + V.x) / 3, y: (T.y + U.y + V.y) / 3 };
+    const center: Point = { x: (A.x + B.x + C.x) / 3, y: (A.y + B.y + C.y) / 3 };
 
-    // Extended vertices (tips of the outer spikes)
-    // These are found by extending from center through each vertex
+    // The stellation diagram has lines parallel to each edge at specific distances
+    // For the icosahedron, the key ratios are: 1, φ, φ², φ³
+    // These create the characteristic nested triangular pattern
+
+    // Vertices extended outward from center (for the spike tips)
     const extendFromCenter = (p: Point, scale: number): Point => ({
         x: center.x + (p.x - center.x) * scale,
         y: center.y + (p.y - center.y) * scale
     });
 
-    // Key scale factors for icosahedral stellation
-    // Based on golden ratio relationships
-    const s2 = phi;   // First stellation (small triakis)
-    const s3 = phi * phi;  // Second stellation
-    const s4 = phi * phi + phi; // Outer spikes
+    // The classic stellation diagram has concentric "shells" of triangles
+    // Shell 1: The original triangle (region 0)
+    // Shell 2: First stellation layer at distance φ
+    // Shell 3: Second layer at distance φ²
+    // Shell 4: Third layer at distance φ³ (outermost spikes)
 
-    // Extended vertices at each shell
-    const T2 = extendFromCenter(T, s2);
-    const U2 = extendFromCenter(U, s2);
-    const V2 = extendFromCenter(V, s2);
+    // Extended vertex positions for each shell
+    const A1 = A, B1 = B, C1 = C;
+    const A2 = extendFromCenter(A, phi);
+    const B2 = extendFromCenter(B, phi);
+    const C2 = extendFromCenter(C, phi);
+    const A3 = extendFromCenter(A, phi * phi);
+    const B3 = extendFromCenter(B, phi * phi);
+    const C3 = extendFromCenter(C, phi * phi);
+    const A4 = extendFromCenter(A, phi * phi * phi);
+    const B4 = extendFromCenter(B, phi * phi * phi);
+    const C4 = extendFromCenter(C, phi * phi * phi);
 
-    const T3 = extendFromCenter(T, s3);
-    const U3 = extendFromCenter(U, s3);
-    const V3 = extendFromCenter(V, s3);
+    // Edge midpoints for each shell
+    const mAB1 = lerp(A1, B1, 0.5);
+    const mBC1 = lerp(B1, C1, 0.5);
+    const mCA1 = lerp(C1, A1, 0.5);
 
-    const T4 = extendFromCenter(T, s4);
-    const U4 = extendFromCenter(U, s4);
-    const V4 = extendFromCenter(V, s4);
+    const mAB2 = extendFromCenter(mAB1, phi);
+    const mBC2 = extendFromCenter(mBC1, phi);
+    const mCA2 = extendFromCenter(mCA1, phi);
 
-    // Extended midpoints at each shell
-    const mTU2 = extendFromCenter(mTU, s2);
-    const mUV2 = extendFromCenter(mUV, s2);
-    const mVT2 = extendFromCenter(mVT, s2);
+    const mAB3 = extendFromCenter(mAB1, phi * phi);
+    const mBC3 = extendFromCenter(mBC1, phi * phi);
+    const mCA3 = extendFromCenter(mCA1, phi * phi);
 
-    const mTU3 = extendFromCenter(mTU, s3);
-    const mUV3 = extendFromCenter(mUV, s3);
-    const mVT3 = extendFromCenter(mVT, s3);
-
-    // Build the regions matching the classic diagram layout
-    // Region 0: Central small triangle (darkest)
-    // Regions 1-3: Three cells around the center
-    // Regions 4-9: Next ring
-    // etc.
-
+    // Build the 14 region types (0-13) of the stellation diagram
+    // Each region maintains 3-fold symmetry around the center
     const regions: { id: number; points: Point[] }[] = [
-        // Region 0: The innermost central region
-        { id: 0, points: [T, U, V] },
+        // ═══════════════════════════════════════════════════════════════════
+        // REGION 0: The central triangle (original icosahedron face)
+        // ═══════════════════════════════════════════════════════════════════
+        { id: 0, points: [A1, B1, C1] },
 
-        // Regions 1, 2, 3: The three corners extending from original triangle
-        { id: 1, points: [T, T2, mTU2, mTU] },
-        { id: 1, points: [T, T2, mVT2, mVT] },
-        { id: 2, points: [U, U2, mTU2, mTU] },
-        { id: 2, points: [U, U2, mUV2, mUV] },
-        { id: 3, points: [V, V2, mUV2, mUV] },
-        { id: 3, points: [V, V2, mVT2, mVT] },
+        // ═══════════════════════════════════════════════════════════════════
+        // REGIONS 1, 2, 3: Three kite-shaped cells adjacent to each vertex
+        // These extend from the triangle corners toward the first shell
+        // ═══════════════════════════════════════════════════════════════════
+        // At vertex A (top-left)
+        { id: 1, points: [A1, mAB2, A2, mCA2] },
+        // At vertex B (top-right)
+        { id: 2, points: [B1, mBC2, B2, mAB2] },
+        // At vertex C (bottom)
+        { id: 3, points: [C1, mCA2, C2, mBC2] },
 
-        // Regions 4, 5, 6: Triangles at the midpoint extensions
-        { id: 4, points: [mTU, mTU2, T2] },
-        { id: 4, points: [mTU, mTU2, U2] },
-        { id: 5, points: [mUV, mUV2, U2] },
-        { id: 5, points: [mUV, mUV2, V2] },
-        { id: 6, points: [mVT, mVT2, V2] },
-        { id: 6, points: [mVT, mVT2, T2] },
+        // ═══════════════════════════════════════════════════════════════════
+        // REGIONS 4, 5, 6: Triangular cells at edge midpoints (first shell)
+        // ═══════════════════════════════════════════════════════════════════
+        // At edge AB midpoint - two triangles
+        { id: 4, points: [mAB1, A2, mAB2] },
+        { id: 4, points: [mAB1, B2, mAB2] },
+        // At edge BC midpoint - two triangles
+        { id: 5, points: [mBC1, B2, mBC2] },
+        { id: 5, points: [mBC1, C2, mBC2] },
+        // At edge CA midpoint - two triangles
+        { id: 6, points: [mCA1, C2, mCA2] },
+        { id: 6, points: [mCA1, A2, mCA2] },
 
-        // Region 7: The second shell triangles at vertices
-        { id: 7, points: [T2, mTU2, mVT2] },
-        { id: 7, points: [U2, mTU2, mUV2] },
-        { id: 7, points: [V2, mUV2, mVT2] },
+        // ═══════════════════════════════════════════════════════════════════
+        // REGION 7: Three triangular cells at the outer vertices of shell 2
+        // ═══════════════════════════════════════════════════════════════════
+        { id: 7, points: [A2, mAB2, mCA2] },
+        { id: 7, points: [B2, mBC2, mAB2] },
+        { id: 7, points: [C2, mCA2, mBC2] },
 
-        // Regions 8, 9, 10: Kite shapes in second shell
-        { id: 8, points: [T2, T3, mTU3, mTU2] },
-        { id: 8, points: [T2, T3, mVT3, mVT2] },
-        { id: 9, points: [U2, U3, mTU3, mTU2] },
-        { id: 9, points: [U2, U3, mUV3, mUV2] },
-        { id: 10, points: [V2, V3, mUV3, mUV2] },
-        { id: 10, points: [V2, V3, mVT3, mVT2] },
+        // ═══════════════════════════════════════════════════════════════════
+        // REGIONS 8, 9, 10: Kite cells extending from shell 2 to shell 3
+        // ═══════════════════════════════════════════════════════════════════
+        // From A2 vertex
+        { id: 8, points: [A2, mAB3, A3, mCA3] },
+        // From B2 vertex
+        { id: 9, points: [B2, mBC3, B3, mAB3] },
+        // From C2 vertex
+        { id: 10, points: [C2, mCA3, C3, mBC3] },
 
-        // Region 11: Triangles connecting the kites
-        { id: 11, points: [mTU2, mTU3, T3] },
-        { id: 11, points: [mTU2, mTU3, U3] },
-        { id: 11, points: [mUV2, mUV3, U3] },
-        { id: 11, points: [mUV2, mUV3, V3] },
-        { id: 11, points: [mVT2, mVT3, V3] },
-        { id: 11, points: [mVT2, mVT3, T3] },
+        // ═══════════════════════════════════════════════════════════════════
+        // REGION 11: Triangular cells at shell 2 midpoints extending to shell 3
+        // ═══════════════════════════════════════════════════════════════════
+        { id: 11, points: [mAB2, A3, mAB3] },
+        { id: 11, points: [mAB2, B3, mAB3] },
+        { id: 11, points: [mBC2, B3, mBC3] },
+        { id: 11, points: [mBC2, C3, mBC3] },
+        { id: 11, points: [mCA2, C3, mCA3] },
+        { id: 11, points: [mCA2, A3, mCA3] },
 
-        // Region 12: Third shell vertex triangles
-        { id: 12, points: [T3, mTU3, mVT3] },
-        { id: 12, points: [U3, mTU3, mUV3] },
-        { id: 12, points: [V3, mUV3, mVT3] },
+        // ═══════════════════════════════════════════════════════════════════
+        // REGION 12: Three triangular cells at shell 3 vertices
+        // ═══════════════════════════════════════════════════════════════════
+        { id: 12, points: [A3, mAB3, mCA3] },
+        { id: 12, points: [B3, mBC3, mAB3] },
+        { id: 12, points: [C3, mCA3, mBC3] },
 
-        // Region 13: Outermost spike triangles
-        { id: 13, points: [T3, T4, mTU3] },
-        { id: 13, points: [T3, T4, mVT3] },
-        { id: 13, points: [U3, U4, mTU3] },
-        { id: 13, points: [U3, U4, mUV3] },
-        { id: 13, points: [V3, V4, mUV3] },
-        { id: 13, points: [V3, V4, mVT3] },
+        // ═══════════════════════════════════════════════════════════════════
+        // REGION 13: Outermost spike triangles (shell 3 to shell 4)
+        // ═══════════════════════════════════════════════════════════════════
+        { id: 13, points: [A3, A4, mAB3] },
+        { id: 13, points: [A3, A4, mCA3] },
+        { id: 13, points: [B3, B4, mBC3] },
+        { id: 13, points: [B3, B4, mAB3] },
+        { id: 13, points: [C3, C4, mCA3] },
+        { id: 13, points: [C3, C4, mBC3] },
     ];
 
-    return { regions, center, T, U, V, T4, U4, V4 };
+    return { regions, center, A: A1, B: B1, C: C1, A4, B4, C4 };
 }
 
 // ── Stellation Diagram SVG Component ──────────────────────────────────────────
@@ -277,24 +303,23 @@ function StellatedIcosahedron({ activeRegions }: StellatedIcosahedronProps) {
         const geometries: { geometry: THREE.BufferGeometry; regionId: number }[] = [];
         const phi = (1 + Math.sqrt(5)) / 2;
 
-        // Scale factors matching the 2D diagram
-        const s1 = 1.0;
-        const s2 = phi;
-        const s3 = phi * phi;
-        const s4 = phi * phi + phi;
+        // Scale factors matching the 2D diagram (based on golden ratio)
+        const s2 = phi;                  // First shell
+        const s3 = phi * phi;            // Second shell
+        const s4 = phi * phi * phi;      // Third shell (outermost spikes)
 
         faceIndices.forEach((face) => {
-            const T = baseVertices[face[0]].clone();
-            const U = baseVertices[face[1]].clone();
-            const V = baseVertices[face[2]].clone();
+            const A = baseVertices[face[0]].clone();
+            const B = baseVertices[face[1]].clone();
+            const C = baseVertices[face[2]].clone();
 
             // Face center
-            const center = new THREE.Vector3().addVectors(T, U).add(V).divideScalar(3);
+            const center = new THREE.Vector3().addVectors(A, B).add(C).divideScalar(3);
 
             // Midpoints
-            const mTU = new THREE.Vector3().addVectors(T, U).divideScalar(2);
-            const mUV = new THREE.Vector3().addVectors(U, V).divideScalar(2);
-            const mVT = new THREE.Vector3().addVectors(V, T).divideScalar(2);
+            const mAB = new THREE.Vector3().addVectors(A, B).divideScalar(2);
+            const mBC = new THREE.Vector3().addVectors(B, C).divideScalar(2);
+            const mCA = new THREE.Vector3().addVectors(C, A).divideScalar(2);
 
             // Extension function - extends point from face center along face plane
             const extendOnPlane = (p: THREE.Vector3, scale: number): THREE.Vector3 => {
@@ -303,26 +328,26 @@ function StellatedIcosahedron({ activeRegions }: StellatedIcosahedronProps) {
             };
 
             // Extended vertices at each shell
-            const T2 = extendOnPlane(T, s2);
-            const U2 = extendOnPlane(U, s2);
-            const V2 = extendOnPlane(V, s2);
+            const A2 = extendOnPlane(A, s2);
+            const B2 = extendOnPlane(B, s2);
+            const C2 = extendOnPlane(C, s2);
 
-            const T3 = extendOnPlane(T, s3);
-            const U3 = extendOnPlane(U, s3);
-            const V3 = extendOnPlane(V, s3);
+            const A3 = extendOnPlane(A, s3);
+            const B3 = extendOnPlane(B, s3);
+            const C3 = extendOnPlane(C, s3);
 
-            const T4 = extendOnPlane(T, s4);
-            const U4 = extendOnPlane(U, s4);
-            const V4 = extendOnPlane(V, s4);
+            const A4 = extendOnPlane(A, s4);
+            const B4 = extendOnPlane(B, s4);
+            const C4 = extendOnPlane(C, s4);
 
             // Extended midpoints
-            const mTU2 = extendOnPlane(mTU, s2);
-            const mUV2 = extendOnPlane(mUV, s2);
-            const mVT2 = extendOnPlane(mVT, s2);
+            const mAB2 = extendOnPlane(mAB, s2);
+            const mBC2 = extendOnPlane(mBC, s2);
+            const mCA2 = extendOnPlane(mCA, s2);
 
-            const mTU3 = extendOnPlane(mTU, s3);
-            const mUV3 = extendOnPlane(mUV, s3);
-            const mVT3 = extendOnPlane(mVT, s3);
+            const mAB3 = extendOnPlane(mAB, s3);
+            const mBC3 = extendOnPlane(mBC, s3);
+            const mCA3 = extendOnPlane(mCA, s3);
 
             // Helper to create triangle geometry
             const createTriangle = (p1: THREE.Vector3, p2: THREE.Vector3, p3: THREE.Vector3): THREE.BufferGeometry => {
@@ -350,57 +375,51 @@ function StellatedIcosahedron({ activeRegions }: StellatedIcosahedronProps) {
             };
 
             // Region 0: The base icosahedron face
-            geometries.push({ geometry: createTriangle(T, U, V), regionId: 0 });
+            geometries.push({ geometry: createTriangle(A, B, C), regionId: 0 });
 
-            // Regions 1, 2, 3: First shell kites from each vertex
-            geometries.push({ geometry: createQuad(T, T2, mTU2, mTU), regionId: 1 });
-            geometries.push({ geometry: createQuad(T, T2, mVT2, mVT), regionId: 1 });
-            geometries.push({ geometry: createQuad(U, U2, mTU2, mTU), regionId: 2 });
-            geometries.push({ geometry: createQuad(U, U2, mUV2, mUV), regionId: 2 });
-            geometries.push({ geometry: createQuad(V, V2, mUV2, mUV), regionId: 3 });
-            geometries.push({ geometry: createQuad(V, V2, mVT2, mVT), regionId: 3 });
+            // Regions 1, 2, 3: First shell kite shapes at each vertex
+            geometries.push({ geometry: createQuad(A, mAB2, A2, mCA2), regionId: 1 });
+            geometries.push({ geometry: createQuad(B, mBC2, B2, mAB2), regionId: 2 });
+            geometries.push({ geometry: createQuad(C, mCA2, C2, mBC2), regionId: 3 });
 
-            // Regions 4, 5, 6: Triangles at midpoint extensions
-            geometries.push({ geometry: createTriangle(mTU, mTU2, T2), regionId: 4 });
-            geometries.push({ geometry: createTriangle(mTU, mTU2, U2), regionId: 4 });
-            geometries.push({ geometry: createTriangle(mUV, mUV2, U2), regionId: 5 });
-            geometries.push({ geometry: createTriangle(mUV, mUV2, V2), regionId: 5 });
-            geometries.push({ geometry: createTriangle(mVT, mVT2, V2), regionId: 6 });
-            geometries.push({ geometry: createTriangle(mVT, mVT2, T2), regionId: 6 });
+            // Regions 4, 5, 6: Triangles at edge midpoints
+            geometries.push({ geometry: createTriangle(mAB, A2, mAB2), regionId: 4 });
+            geometries.push({ geometry: createTriangle(mAB, B2, mAB2), regionId: 4 });
+            geometries.push({ geometry: createTriangle(mBC, B2, mBC2), regionId: 5 });
+            geometries.push({ geometry: createTriangle(mBC, C2, mBC2), regionId: 5 });
+            geometries.push({ geometry: createTriangle(mCA, C2, mCA2), regionId: 6 });
+            geometries.push({ geometry: createTriangle(mCA, A2, mCA2), regionId: 6 });
 
-            // Region 7: Second shell vertex triangles
-            geometries.push({ geometry: createTriangle(T2, mTU2, mVT2), regionId: 7 });
-            geometries.push({ geometry: createTriangle(U2, mTU2, mUV2), regionId: 7 });
-            geometries.push({ geometry: createTriangle(V2, mUV2, mVT2), regionId: 7 });
+            // Region 7: Triangles at shell 2 vertices
+            geometries.push({ geometry: createTriangle(A2, mAB2, mCA2), regionId: 7 });
+            geometries.push({ geometry: createTriangle(B2, mBC2, mAB2), regionId: 7 });
+            geometries.push({ geometry: createTriangle(C2, mCA2, mBC2), regionId: 7 });
 
-            // Regions 8, 9, 10: Second shell kites
-            geometries.push({ geometry: createQuad(T2, T3, mTU3, mTU2), regionId: 8 });
-            geometries.push({ geometry: createQuad(T2, T3, mVT3, mVT2), regionId: 8 });
-            geometries.push({ geometry: createQuad(U2, U3, mTU3, mTU2), regionId: 9 });
-            geometries.push({ geometry: createQuad(U2, U3, mUV3, mUV2), regionId: 9 });
-            geometries.push({ geometry: createQuad(V2, V3, mUV3, mUV2), regionId: 10 });
-            geometries.push({ geometry: createQuad(V2, V3, mVT3, mVT2), regionId: 10 });
+            // Regions 8, 9, 10: Kite shapes from shell 2 to shell 3
+            geometries.push({ geometry: createQuad(A2, mAB3, A3, mCA3), regionId: 8 });
+            geometries.push({ geometry: createQuad(B2, mBC3, B3, mAB3), regionId: 9 });
+            geometries.push({ geometry: createQuad(C2, mCA3, C3, mBC3), regionId: 10 });
 
-            // Region 11: Triangles connecting kites
-            geometries.push({ geometry: createTriangle(mTU2, mTU3, T3), regionId: 11 });
-            geometries.push({ geometry: createTriangle(mTU2, mTU3, U3), regionId: 11 });
-            geometries.push({ geometry: createTriangle(mUV2, mUV3, U3), regionId: 11 });
-            geometries.push({ geometry: createTriangle(mUV2, mUV3, V3), regionId: 11 });
-            geometries.push({ geometry: createTriangle(mVT2, mVT3, V3), regionId: 11 });
-            geometries.push({ geometry: createTriangle(mVT2, mVT3, T3), regionId: 11 });
+            // Region 11: Triangles at shell 2 midpoints
+            geometries.push({ geometry: createTriangle(mAB2, A3, mAB3), regionId: 11 });
+            geometries.push({ geometry: createTriangle(mAB2, B3, mAB3), regionId: 11 });
+            geometries.push({ geometry: createTriangle(mBC2, B3, mBC3), regionId: 11 });
+            geometries.push({ geometry: createTriangle(mBC2, C3, mBC3), regionId: 11 });
+            geometries.push({ geometry: createTriangle(mCA2, C3, mCA3), regionId: 11 });
+            geometries.push({ geometry: createTriangle(mCA2, A3, mCA3), regionId: 11 });
 
-            // Region 12: Third shell vertex triangles
-            geometries.push({ geometry: createTriangle(T3, mTU3, mVT3), regionId: 12 });
-            geometries.push({ geometry: createTriangle(U3, mTU3, mUV3), regionId: 12 });
-            geometries.push({ geometry: createTriangle(V3, mUV3, mVT3), regionId: 12 });
+            // Region 12: Triangles at shell 3 vertices
+            geometries.push({ geometry: createTriangle(A3, mAB3, mCA3), regionId: 12 });
+            geometries.push({ geometry: createTriangle(B3, mBC3, mAB3), regionId: 12 });
+            geometries.push({ geometry: createTriangle(C3, mCA3, mBC3), regionId: 12 });
 
-            // Region 13: Outermost spikes
-            geometries.push({ geometry: createTriangle(T3, T4, mTU3), regionId: 13 });
-            geometries.push({ geometry: createTriangle(T3, T4, mVT3), regionId: 13 });
-            geometries.push({ geometry: createTriangle(U3, U4, mTU3), regionId: 13 });
-            geometries.push({ geometry: createTriangle(U3, U4, mUV3), regionId: 13 });
-            geometries.push({ geometry: createTriangle(V3, V4, mUV3), regionId: 13 });
-            geometries.push({ geometry: createTriangle(V3, V4, mVT3), regionId: 13 });
+            // Region 13: Outermost spike triangles
+            geometries.push({ geometry: createTriangle(A3, A4, mAB3), regionId: 13 });
+            geometries.push({ geometry: createTriangle(A3, A4, mCA3), regionId: 13 });
+            geometries.push({ geometry: createTriangle(B3, B4, mBC3), regionId: 13 });
+            geometries.push({ geometry: createTriangle(B3, B4, mAB3), regionId: 13 });
+            geometries.push({ geometry: createTriangle(C3, C4, mCA3), regionId: 13 });
+            geometries.push({ geometry: createTriangle(C3, C4, mBC3), regionId: 13 });
         });
 
         return geometries;
