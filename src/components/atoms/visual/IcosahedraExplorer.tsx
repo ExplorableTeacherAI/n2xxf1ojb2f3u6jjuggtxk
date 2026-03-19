@@ -217,8 +217,9 @@ interface IcosahedronMeshProps {
 
 function IcosahedronMesh({ textureDataUrl }: IcosahedronMeshProps) {
     const meshRef = useRef<THREE.Group>(null);
-    const textureRef = useRef<THREE.CanvasTexture | null>(null);
+    const materialsRef = useRef<THREE.MeshStandardMaterial[]>([]);
     const [texture, setTexture] = useState<THREE.CanvasTexture | null>(null);
+    const [textureVersion, setTextureVersion] = useState(0);
 
     // Create icosahedron vertices using the golden ratio
     const vertices = useMemo(() => {
@@ -259,20 +260,25 @@ function IcosahedronMesh({ textureDataUrl }: IcosahedronMeshProps) {
             const ctx = canvas.getContext("2d");
             if (!ctx) return;
 
-            // Draw the image to the canvas
+            // Flip vertically for Three.js UV coordinates (bottom-left origin)
+            ctx.translate(0, 512);
+            ctx.scale(1, -1);
             ctx.drawImage(img, 0, 0, 512, 512);
 
-            // Create or update texture
-            if (textureRef.current) {
-                textureRef.current.image = canvas;
-                textureRef.current.needsUpdate = true;
-            } else {
-                const newTexture = new THREE.CanvasTexture(canvas);
-                newTexture.wrapS = THREE.ClampToEdgeWrapping;
-                newTexture.wrapT = THREE.ClampToEdgeWrapping;
-                textureRef.current = newTexture;
-                setTexture(newTexture);
-            }
+            // Create new texture each time for reliable updates
+            const newTexture = new THREE.CanvasTexture(canvas);
+            newTexture.wrapS = THREE.ClampToEdgeWrapping;
+            newTexture.wrapT = THREE.ClampToEdgeWrapping;
+            newTexture.needsUpdate = true;
+
+            setTexture(newTexture);
+            setTextureVersion(v => v + 1);
+
+            // Update all materials
+            materialsRef.current.forEach(mat => {
+                mat.map = newTexture;
+                mat.needsUpdate = true;
+            });
         };
         img.src = textureDataUrl;
     }, [textureDataUrl]);
@@ -293,16 +299,17 @@ function IcosahedronMesh({ textureDataUrl }: IcosahedronMeshProps) {
             ]);
 
             // UV coordinates mapping to equilateral triangle in texture
-            // Triangle in texture is centered, pointing up
+            // Triangle in texture is centered, pointing up (after vertical flip)
             const cx = 0.5;
             const cy = 0.5;
             const size = 0.42;
             const h = size * Math.sqrt(3) / 2;
 
+            // UVs: top vertex, bottom-left, bottom-right of the triangle
             const uvs = new Float32Array([
-                cx, cy - h * 2 / 3,           // top
-                cx - size / 2, cy + h / 3,    // bottom left
-                cx + size / 2, cy + h / 3,    // bottom right
+                cx, cy + h * 2 / 3,            // top (flipped)
+                cx - size / 2, cy - h / 3,    // bottom left (flipped)
+                cx + size / 2, cy - h / 3,    // bottom right (flipped)
             ]);
 
             geometry.setAttribute("position", new THREE.BufferAttribute(positions, 3));
@@ -321,11 +328,19 @@ function IcosahedronMesh({ textureDataUrl }: IcosahedronMeshProps) {
         }
     });
 
+    // Store material references for updates
+    const setMaterialRef = useCallback((index: number) => (mat: THREE.MeshStandardMaterial | null) => {
+        if (mat) {
+            materialsRef.current[index] = mat;
+        }
+    }, []);
+
     return (
         <group ref={meshRef}>
             {faceGeometries.map((geometry, i) => (
-                <mesh key={i} geometry={geometry}>
+                <mesh key={`${i}-${textureVersion}`} geometry={geometry}>
                     <meshStandardMaterial
+                        ref={setMaterialRef(i)}
                         map={texture}
                         side={THREE.DoubleSide}
                         roughness={0.4}
@@ -337,10 +352,10 @@ function IcosahedronMesh({ textureDataUrl }: IcosahedronMeshProps) {
             <mesh>
                 <icosahedronGeometry args={[2, 0]} />
                 <meshBasicMaterial
-                    color="#94a3b8"
+                    color="#64748b"
                     wireframe
                     transparent
-                    opacity={0.3}
+                    opacity={0.4}
                 />
             </mesh>
         </group>
