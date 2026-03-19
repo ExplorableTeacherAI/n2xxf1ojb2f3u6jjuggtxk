@@ -1,4 +1,4 @@
-import React, { useRef, useState, useCallback, useEffect, Suspense, useMemo } from "react";
+import React, { useRef, useState, useCallback, Suspense, useMemo } from "react";
 import { Canvas, useFrame } from "@react-three/fiber";
 import { OrbitControls, PerspectiveCamera } from "@react-three/drei";
 import * as THREE from "three";
@@ -220,69 +220,18 @@ function StellationDiagram({ activeRegions, onToggleRegion, size = 350 }: Stella
     );
 }
 
-// ── Texture Generation from Active Regions ────────────────────────────────────
+// ── 3D Stellation Geometry ────────────────────────────────────────────────────
+// Generate actual 3D stellated geometry based on active regions
 
-function generateTextureFromRegions(activeRegions: Set<number>, canvasSize: number = 512): string {
-    const canvas = document.createElement("canvas");
-    canvas.width = canvasSize;
-    canvas.height = canvasSize;
-    const ctx = canvas.getContext("2d");
-    if (!ctx) return "";
-
-    // White background
-    ctx.fillStyle = "#ffffff";
-    ctx.fillRect(0, 0, canvasSize, canvasSize);
-
-    const cx = canvasSize / 2;
-    const cy = canvasSize / 2;
-    const triangleSize = canvasSize * 0.28;
-
-    const { regions } = generateStellationGeometry(triangleSize, cx, cy);
-
-    // Draw active regions
-    regions.forEach(region => {
-        if (activeRegions.has(region.id)) {
-            ctx.beginPath();
-            ctx.moveTo(region.points[0].x, region.points[0].y);
-            for (let i = 1; i < region.points.length; i++) {
-                ctx.lineTo(region.points[i].x, region.points[i].y);
-            }
-            ctx.closePath();
-            ctx.fillStyle = REGION_COLORS[region.id];
-            ctx.fill();
-        }
-    });
-
-    // Draw all region outlines
-    ctx.strokeStyle = "#334155";
-    ctx.lineWidth = 1;
-    regions.forEach(region => {
-        ctx.beginPath();
-        ctx.moveTo(region.points[0].x, region.points[0].y);
-        for (let i = 1; i < region.points.length; i++) {
-            ctx.lineTo(region.points[i].x, region.points[i].y);
-        }
-        ctx.closePath();
-        ctx.stroke();
-    });
-
-    return canvas.toDataURL("image/png");
+interface StellatedIcosahedronProps {
+    activeRegions: Set<number>;
 }
 
-// ── Icosahedron with Textured Faces ───────────────────────────────────────────
-
-interface IcosahedronMeshProps {
-    textureDataUrl: string;
-}
-
-function IcosahedronMesh({ textureDataUrl }: IcosahedronMeshProps) {
+function StellatedIcosahedron({ activeRegions }: StellatedIcosahedronProps) {
     const meshRef = useRef<THREE.Group>(null);
-    const materialsRef = useRef<THREE.MeshStandardMaterial[]>([]);
-    const [texture, setTexture] = useState<THREE.CanvasTexture | null>(null);
-    const [textureVersion, setTextureVersion] = useState(0);
 
-    // Create icosahedron vertices using the golden ratio
-    const vertices = useMemo(() => {
+    // Icosahedron base vertices (normalized, scaled by 2)
+    const baseVertices = useMemo(() => {
         const phi = (1 + Math.sqrt(5)) / 2;
         return [
             new THREE.Vector3(-1, phi, 0).normalize().multiplyScalar(2),
@@ -300,82 +249,132 @@ function IcosahedronMesh({ textureDataUrl }: IcosahedronMeshProps) {
         ];
     }, []);
 
-    // 20 faces of icosahedron
-    const faces = useMemo(() => [
+    // 20 faces of icosahedron (vertex indices)
+    const faceIndices = useMemo(() => [
         [0, 11, 5], [0, 5, 1], [0, 1, 7], [0, 7, 10], [0, 10, 11],
         [1, 5, 9], [5, 11, 4], [11, 10, 2], [10, 7, 6], [7, 1, 8],
         [3, 9, 4], [3, 4, 2], [3, 2, 6], [3, 6, 8], [3, 8, 9],
         [4, 9, 5], [2, 4, 11], [6, 2, 10], [8, 6, 7], [9, 8, 1],
     ], []);
 
-    // Update texture when data URL changes
-    useEffect(() => {
-        if (!textureDataUrl) return;
+    // Generate 3D stellation cells for each face
+    const stellationGeometry = useMemo(() => {
+        const geometries: { geometry: THREE.BufferGeometry; regionId: number }[] = [];
 
-        const img = new Image();
-        img.onload = () => {
-            const canvas = document.createElement("canvas");
-            canvas.width = 512;
-            canvas.height = 512;
-            const ctx = canvas.getContext("2d");
-            if (!ctx) return;
+        faceIndices.forEach((face) => {
+            const A = baseVertices[face[0]].clone();
+            const B = baseVertices[face[1]].clone();
+            const C = baseVertices[face[2]].clone();
 
-            // Flip vertically for Three.js UV coordinates
-            ctx.translate(0, 512);
-            ctx.scale(1, -1);
-            ctx.drawImage(img, 0, 0, 512, 512);
+            // Face center
+            const center = new THREE.Vector3().addVectors(A, B).add(C).divideScalar(3);
 
-            const newTexture = new THREE.CanvasTexture(canvas);
-            newTexture.wrapS = THREE.ClampToEdgeWrapping;
-            newTexture.wrapT = THREE.ClampToEdgeWrapping;
-            newTexture.needsUpdate = true;
+            // Midpoints
+            const mAB = new THREE.Vector3().addVectors(A, B).divideScalar(2);
+            const mBC = new THREE.Vector3().addVectors(B, C).divideScalar(2);
+            const mCA = new THREE.Vector3().addVectors(C, A).divideScalar(2);
 
-            setTexture(newTexture);
-            setTextureVersion(v => v + 1);
+            // Extension function - extends point from face center along face plane
+            const extendOnPlane = (p: THREE.Vector3, scale: number): THREE.Vector3 => {
+                const dir = new THREE.Vector3().subVectors(p, center);
+                return center.clone().add(dir.multiplyScalar(scale));
+            };
 
-            materialsRef.current.forEach(mat => {
-                mat.map = newTexture;
-                mat.needsUpdate = true;
-            });
-        };
-        img.src = textureDataUrl;
-    }, [textureDataUrl]);
+            // Extended vertices
+            const A2 = extendOnPlane(A, 2.0);
+            const B2 = extendOnPlane(B, 2.0);
+            const C2 = extendOnPlane(C, 2.0);
+            const A3 = extendOnPlane(A, 3.0);
+            const B3 = extendOnPlane(B, 3.0);
+            const C3 = extendOnPlane(C, 3.0);
+            const A4 = extendOnPlane(A, 4.5);
+            const B4 = extendOnPlane(B, 4.5);
+            const C4 = extendOnPlane(C, 4.5);
 
-    // Create face geometries with UV mapping
-    const faceGeometries = useMemo(() => {
-        return faces.map((face) => {
-            const geometry = new THREE.BufferGeometry();
+            const mAB2 = extendOnPlane(mAB, 2.0);
+            const mBC2 = extendOnPlane(mBC, 2.0);
+            const mCA2 = extendOnPlane(mCA, 2.0);
+            const mAB3 = extendOnPlane(mAB, 3.0);
+            const mBC3 = extendOnPlane(mBC, 3.0);
+            const mCA3 = extendOnPlane(mCA, 3.0);
 
-            const v0 = vertices[face[0]];
-            const v1 = vertices[face[1]];
-            const v2 = vertices[face[2]];
+            // Helper to create triangle geometry
+            const createTriangle = (p1: THREE.Vector3, p2: THREE.Vector3, p3: THREE.Vector3): THREE.BufferGeometry => {
+                const geom = new THREE.BufferGeometry();
+                const positions = new Float32Array([
+                    p1.x, p1.y, p1.z,
+                    p2.x, p2.y, p2.z,
+                    p3.x, p3.y, p3.z,
+                ]);
+                geom.setAttribute("position", new THREE.BufferAttribute(positions, 3));
+                geom.computeVertexNormals();
+                return geom;
+            };
 
-            const positions = new Float32Array([
-                v0.x, v0.y, v0.z,
-                v1.x, v1.y, v1.z,
-                v2.x, v2.y, v2.z,
-            ]);
+            // Helper to create quad geometry (two triangles)
+            const createQuad = (p1: THREE.Vector3, p2: THREE.Vector3, p3: THREE.Vector3, p4: THREE.Vector3): THREE.BufferGeometry => {
+                const geom = new THREE.BufferGeometry();
+                const positions = new Float32Array([
+                    p1.x, p1.y, p1.z, p2.x, p2.y, p2.z, p3.x, p3.y, p3.z,
+                    p1.x, p1.y, p1.z, p3.x, p3.y, p3.z, p4.x, p4.y, p4.z,
+                ]);
+                geom.setAttribute("position", new THREE.BufferAttribute(positions, 3));
+                geom.computeVertexNormals();
+                return geom;
+            };
 
-            // UV mapping to match the stellation diagram triangle
-            // The diagram triangle is centered and pointing up
-            const cx = 0.5;
-            const cy = 0.5;
-            const uvSize = 0.28;
-            const uvH = uvSize * Math.sqrt(3) / 2;
+            // Region 0: Center triangles (the basic icosahedron face)
+            geometries.push({ geometry: createTriangle(center, mAB, mCA), regionId: 0 });
+            geometries.push({ geometry: createTriangle(center, mBC, mAB), regionId: 0 });
+            geometries.push({ geometry: createTriangle(center, mCA, mBC), regionId: 0 });
 
-            const uvs = new Float32Array([
-                cx, cy + uvH * 2 / 3,           // top
-                cx - uvSize / 2, cy - uvH / 3, // bottom left
-                cx + uvSize / 2, cy - uvH / 3, // bottom right
-            ]);
+            // Region 1, 2, 3: Corner triangles of the basic face
+            geometries.push({ geometry: createTriangle(A, mAB, mCA), regionId: 1 });
+            geometries.push({ geometry: createTriangle(B, mBC, mAB), regionId: 2 });
+            geometries.push({ geometry: createTriangle(C, mCA, mBC), regionId: 3 });
 
-            geometry.setAttribute("position", new THREE.BufferAttribute(positions, 3));
-            geometry.setAttribute("uv", new THREE.BufferAttribute(uvs, 2));
-            geometry.computeVertexNormals();
+            // Regions 4-9: First layer of stellation (kite shapes)
+            geometries.push({ geometry: createQuad(mAB, A, A2, mAB2), regionId: 4 });
+            geometries.push({ geometry: createQuad(mCA, A, A2, mCA2), regionId: 5 });
+            geometries.push({ geometry: createQuad(mAB, B, B2, mAB2), regionId: 6 });
+            geometries.push({ geometry: createQuad(mBC, B, B2, mBC2), regionId: 7 });
+            geometries.push({ geometry: createQuad(mBC, C, C2, mBC2), regionId: 8 });
+            geometries.push({ geometry: createQuad(mCA, C, C2, mCA2), regionId: 9 });
 
-            return geometry;
+            // Region 10: Second layer triangles
+            geometries.push({ geometry: createTriangle(A2, mAB2, mCA2), regionId: 10 });
+            geometries.push({ geometry: createTriangle(B2, mBC2, mAB2), regionId: 10 });
+            geometries.push({ geometry: createTriangle(C2, mCA2, mBC2), regionId: 10 });
+
+            // Region 11: Second layer kites
+            geometries.push({ geometry: createQuad(mAB2, A2, A3, mAB3), regionId: 11 });
+            geometries.push({ geometry: createQuad(mCA2, A2, A3, mCA3), regionId: 11 });
+            geometries.push({ geometry: createQuad(mAB2, B2, B3, mAB3), regionId: 11 });
+            geometries.push({ geometry: createQuad(mBC2, B2, B3, mBC3), regionId: 11 });
+            geometries.push({ geometry: createQuad(mBC2, C2, C3, mBC3), regionId: 11 });
+            geometries.push({ geometry: createQuad(mCA2, C2, C3, mCA3), regionId: 11 });
+
+            // Region 12: Third layer triangles
+            geometries.push({ geometry: createTriangle(A3, mAB3, mCA3), regionId: 12 });
+            geometries.push({ geometry: createTriangle(B3, mBC3, mAB3), regionId: 12 });
+            geometries.push({ geometry: createTriangle(C3, mCA3, mBC3), regionId: 12 });
+
+            // Region 13: Outermost spikes
+            geometries.push({ geometry: createTriangle(A3, A4, mCA3), regionId: 13 });
+            geometries.push({ geometry: createTriangle(A3, A4, mAB3), regionId: 13 });
+            geometries.push({ geometry: createTriangle(B3, B4, mAB3), regionId: 13 });
+            geometries.push({ geometry: createTriangle(B3, B4, mBC3), regionId: 13 });
+            geometries.push({ geometry: createTriangle(C3, C4, mBC3), regionId: 13 });
+            geometries.push({ geometry: createTriangle(C3, C4, mCA3), regionId: 13 });
         });
-    }, [faces, vertices]);
+
+        return geometries;
+    }, [baseVertices, faceIndices]);
+
+    // Filter to only active regions
+    const activeGeometries = useMemo(() => {
+        return stellationGeometry.filter(g => activeRegions.has(g.regionId));
+    }, [stellationGeometry, activeRegions]);
 
     // Auto-rotation
     useFrame((_, delta) => {
@@ -385,33 +384,26 @@ function IcosahedronMesh({ textureDataUrl }: IcosahedronMeshProps) {
         }
     });
 
-    const setMaterialRef = useCallback((index: number) => (mat: THREE.MeshStandardMaterial | null) => {
-        if (mat) {
-            materialsRef.current[index] = mat;
-        }
-    }, []);
-
     return (
         <group ref={meshRef}>
-            {faceGeometries.map((geometry, i) => (
-                <mesh key={`${i}-${textureVersion}`} geometry={geometry}>
+            {activeGeometries.map((item, i) => (
+                <mesh key={i} geometry={item.geometry}>
                     <meshStandardMaterial
-                        ref={setMaterialRef(i)}
-                        map={texture}
+                        color={REGION_COLORS[item.regionId]}
                         side={THREE.DoubleSide}
                         roughness={0.4}
                         metalness={0.1}
                     />
                 </mesh>
             ))}
-            {/* Wireframe overlay */}
+            {/* Wireframe of basic icosahedron for reference */}
             <mesh>
                 <icosahedronGeometry args={[2, 0]} />
                 <meshBasicMaterial
                     color="#334155"
                     wireframe
                     transparent
-                    opacity={0.3}
+                    opacity={0.2}
                 />
             </mesh>
         </group>
@@ -428,7 +420,6 @@ export interface IcosahedraExplorerProps {
 export function IcosahedraExplorer({ height = 450, className = "" }: IcosahedraExplorerProps) {
     // Start with region 0 active (the basic icosahedron)
     const [activeRegions, setActiveRegions] = useState<Set<number>>(() => new Set([0]));
-    const [textureDataUrl, setTextureDataUrl] = useState<string>("");
 
     const handleToggleRegion = useCallback((regionId: number) => {
         setActiveRegions(prev => {
@@ -442,17 +433,11 @@ export function IcosahedraExplorer({ height = 450, className = "" }: IcosahedraE
         });
     }, []);
 
-    // Generate texture whenever active regions change
-    useEffect(() => {
-        const dataUrl = generateTextureFromRegions(activeRegions);
-        setTextureDataUrl(dataUrl);
-    }, [activeRegions]);
-
     // Preset buttons for common stellations
     const presets = [
         { label: "Clear All", regions: [] },
-        { label: "Icosahedron", regions: [0] },
-        { label: "Small Triambic", regions: [0, 1, 2, 3] },
+        { label: "Icosahedron", regions: [0, 1, 2, 3] },
+        { label: "First Stellation", regions: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9] },
         { label: "Great Icosahedron", regions: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13] },
     ];
 
@@ -479,7 +464,7 @@ export function IcosahedraExplorer({ height = 450, className = "" }: IcosahedraE
                 </div>
             </div>
 
-            {/* 3D Icosahedron View */}
+            {/* 3D Stellated Icosahedron View */}
             <div className="flex flex-col gap-2 flex-1 min-w-[350px]">
                 <div className="text-sm font-medium text-slate-600">3D View (drag to rotate)</div>
                 <div
@@ -487,12 +472,12 @@ export function IcosahedraExplorer({ height = 450, className = "" }: IcosahedraE
                     style={{ height, width: "100%" }}
                 >
                     <Canvas dpr={[1, 2]}>
-                        <PerspectiveCamera makeDefault position={[0, 0, 6]} fov={50} />
+                        <PerspectiveCamera makeDefault position={[0, 0, 8]} fov={50} />
                         <Suspense fallback={null}>
                             <ambientLight intensity={0.6} />
                             <directionalLight position={[5, 5, 5]} intensity={0.8} />
                             <directionalLight position={[-3, -3, -3]} intensity={0.3} />
-                            <IcosahedronMesh textureDataUrl={textureDataUrl} />
+                            <StellatedIcosahedron activeRegions={activeRegions} />
                         </Suspense>
                         <OrbitControls
                             makeDefault
@@ -500,7 +485,7 @@ export function IcosahedraExplorer({ height = 450, className = "" }: IcosahedraE
                             dampingFactor={0.1}
                             enablePan={false}
                             minDistance={4}
-                            maxDistance={12}
+                            maxDistance={20}
                         />
                     </Canvas>
                 </div>
